@@ -388,7 +388,7 @@ class Trainer(object):
             Global time step (number of steps
             processed by the global/shared network)
         """
-        # States of the LSTM
+
         states = []
         last_action_rewards = []
         actions = []
