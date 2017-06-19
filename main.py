@@ -27,7 +27,7 @@ class App(object):
                  env='Breakout-v0',
                  initial_alpha_low=1e-4,
                  initial_alpha_high=5e-3,
-                 parallel_size=1,
+                 parallel_size=8,
                  checkpoint_interval=100 * 1000,
                  logging_interval=1000):
 
@@ -68,15 +68,17 @@ class App(object):
 
             # Save the network
             if parallel_index == 0 and self.global_t > self.next_checkpoint:
-                self.saver.save(self.sess, CHECKPOINT_DIR)
+                self.saver.save(self.sess, SAVE_PATH)
 
                 # Set next checkpoint
                 self.next_checkpoint += self.checkpoint_interval
 
             # Process local_t timesteps and update
             # global_t
-            diff_global_t = trainer._process_a3c(self.sess,
-                                                 self.global_t)
+            diff_global_t = trainer._process_a3c(self.sess, self.global_t,
+                                                 self.summary_writer,
+                                                 self.summary_op,
+                                                 self.score_input)
 
             # Set global time step
             self.global_t += diff_global_t
@@ -128,6 +130,8 @@ class App(object):
                                   initial_learning_rate=initial_learning_rate,
                                   grad_applier=grad_applier,
                                   learning_rate=learning_rate_input)
+                if i == 0:
+                    trainer.show_env = True
 
                 self.trainers.append(trainer)
 
@@ -135,16 +139,22 @@ class App(object):
             self.sess = tf.Session()
             self.sess.run(tf.global_variables_initializer())
 
+            # Params for logging scores in Tensorboard
+            self.score_input = tf.placeholder(tf.int32)
+            tf.summary.scalar("score", self.score_input)
+            self.summary_op = tf.summary.merge_all()
+
+            # sess.graph contains the graph definition;
+            # that enables the Graph Visualizer. To start
+            # Tensorboard run the following command:
+            # $ tensorboard --logdir=path/to/LOG_FILE
+            self.summary_writer = tf.summary.FileWriter(LOG_FILE,
+                                                        graph=self.sess.graph)
+
+
             # Parameters for saving the global network params
-            self.saver = tf.train.Saver(self.global_network.get_vars())
-
-            # Load checkpoint if there is one
-            checkpoint = tf.train.get_checkpoint_state(CHECKPOINT_DIR)
-
-            if checkpoint and checkpoint.model_checkpoint_path:
-                print('Restoring model: %s' % checkpoint.model_checkpoint_path)
-                self.saver.restore(self.sess, checkpoint.model_checkpoint_path)
-                print('Done!')
+            self.saver = tf.train.Saver(var_list=self.global_network.get_vars(),
+                                        max_to_keep=1)
 
             # Set next checkpoint
             self.next_checkpoint = self.checkpoint_interval
@@ -164,5 +174,5 @@ class App(object):
                 t.start()
 
 if __name__ == '__main__':
-    app = App()
-    app.run()
+    agent = App()
+    agent.run()
