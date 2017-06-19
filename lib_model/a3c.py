@@ -394,7 +394,10 @@ class Trainer(object):
         actions = []
         rewards = []
         values = []
-
+        
+        # Initialize local_t
+        self.local_t = 0
+        
         # Whether we hit a terminal state or not
         terminal_end = False
         start_lstm_state = self.local_network.lstm_state_out
@@ -511,7 +514,7 @@ class Trainer(object):
 
         # compute gradients and update weights
         sess.run(self.apply_gradients, feed_dict=feed_dict)
-
+        """
         # ----------------
         # PRINT STATISTICS
         # ----------------
@@ -534,10 +537,11 @@ class Trainer(object):
                 f.write('Reward: %3d - Total Loss: %.4f - Policy Loss: %.4f '
                   '- Value Loss: %.4f \n' %
                   (float(R), total_loss, policy_loss, value_loss))
-
+        """
+        
         # Return the number of steps taken
         # to update global_time_steps
-        return self.local_t_max
+        return self.local_t
 
 if __name__ == '__main__':
     network = A3C(action_size=5,
