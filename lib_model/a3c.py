@@ -5,7 +5,7 @@ import numpy as np
 
 PATH = '/home/ashbylepoc/PycharmProjects/RL/'
 MAX_TIME_STEP = 10 * 10 ** 7
-LOG_FILE = PATH + 'checkpoints/log.txt'
+LOG_FILE = PATH + 'checkpoints/log'
 CHECKPOINT_DIR = PATH + 'checkpoints'
 
 class A3C(object):
@@ -202,7 +202,8 @@ class A3C(object):
         # Note that in the algorithm in the original A3C paper,
         # does not use the entropy of pi, but it has been shown
         # to improve training stability
-        self.entropy = - tf.reduce_sum(self.pi * self.log_pi, reduction_indices=1)
+        self.entropy = - tf.reduce_sum(self.pi * self.log_pi,
+                                       reduction_indices=1)
 
         # loss for the policy (actor)
         self.policy_loss = - tf.reduce_sum(self.log_pi) * self.adv \
@@ -289,6 +290,7 @@ class Trainer(object):
                  initial_learning_rate,
                  learning_rate,
                  grad_applier,
+                 show_env=False,
                  local_t_max=20,
                  max_global_time_step=10 * 10**7,
                  gamma=0.99,
@@ -299,6 +301,12 @@ class Trainer(object):
         self.thread_index = thread_index
         self.learning_rate = learning_rate
         self.env = env
+
+        # Whether to render the environment
+        # or not during training (default is
+        # True for one of the agents) - change
+        # this in main.py
+        self.show_env = show_env
 
         # Discount factor for the reward
         self.gamma = gamma
@@ -339,11 +347,20 @@ class Trainer(object):
 
     def build_environment(self):
         """ Create the environment """
-        self.environment = Environment(self.env)
+        self.environment = Environment(self.env, show_env=self.show_env)
 
     def stop(self):
         """ Terminate the environment """
         self.environment.stop()
+
+    def _record_score(self, sess, summary_writer, summary_op,
+                      score_input, score, global_t):
+        """ Save Score to Tensorboard """
+        summary_str = sess.run(summary_op, feed_dict={score_input: score})
+        summary_writer.add_summary(summary_str, global_t)
+
+        # Write to disk
+        summary_writer.flush()
 
     def choose_action(self, pi_values):
         """
@@ -376,7 +393,8 @@ class Trainer(object):
             learning_rate = 0.0
         return learning_rate
 
-    def _process_a3c(self, sess, global_t):
+    def _process_a3c(self, sess, global_t, summary_writer,
+                     summary_op, score_input):
         """
         Process max_local_t steps/frames in the
         A3C network
@@ -388,19 +406,19 @@ class Trainer(object):
             Global time step (number of steps
             processed by the global/shared network)
         """
-
+        # States of the LSTM
         states = []
         last_action_rewards = []
         actions = []
         rewards = []
         values = []
-        
-        # Initialize local_t
-        self.local_t = 0
-        
+
         # Synchronize with global network
         sess.run(self.sync)
-        
+
+        # Initial local time step
+        self.local_t = 0
+
         # Whether we hit a terminal state or not
         terminal_end = False
         start_lstm_state = self.local_network.lstm_state_out
@@ -427,8 +445,6 @@ class Trainer(object):
             actions.append(action)
             values.append(value_)
 
-            prev_state = self.environment.last_state
-
             # Process next action
             new_state, reward, terminal = self.environment.process(action)
 
@@ -440,6 +456,16 @@ class Trainer(object):
             if terminal:
                 # Environment hit a terminal state
                 terminal_end = True
+
+                # ----------------
+                # PRINT STATISTICS
+                # ----------------
+
+                print('Time step: %5d k - Score: %3d' %
+                      (global_t / 1000, self.episode_reward))
+
+                self._record_score(sess, summary_writer, summary_op, score_input,
+                                   self.episode_reward, global_t)
 
                 # If we hit a terminal state, then the
                 # reward is set to 0, else, it is set
@@ -475,7 +501,8 @@ class Trainer(object):
         batch_adv = []
         batch_R = []
 
-
+        # For printing
+        R_non_discounted = R
 
         # Discounting...
         for (ai, ri, si, Vi) in zip(actions, rewards, states, values):
@@ -500,7 +527,6 @@ class Trainer(object):
         batch_R.reverse()
 
         # Decay learning rate
-        start_local_t = self.local_t
         cur_learning_rate = self._decay_learning_rate(global_t)
 
         # Create feed_dict for gradient_applier
@@ -531,9 +557,10 @@ class Trainer(object):
         value_loss = np.mean(value_loss)
 
         if global_t % 1000 == 0:
-            print('Reward: %3d - Total Loss: %.4f - Policy Loss: %.4f '
-                  '- Value Loss: %.4f' %
-                  (float(R), total_loss, policy_loss, value_loss))
+            print('Time Step: %6d k Reward: %3d - Total Loss: %.4f - '
+                  'Policy Loss: %.4f - Value Loss: %.4f' %
+                  (global_t / 1000, float(R_non_discounted), total_loss,
+                   policy_loss, value_loss))
 
             # Save to log file
             with open(LOG_FILE, 'a') as f:
@@ -541,7 +568,8 @@ class Trainer(object):
                   '- Value Loss: %.4f \n' %
                   (float(R), total_loss, policy_loss, value_loss))
         """
-        
+
+
         # Return the number of steps taken
         # to update global_time_steps
         return self.local_t
