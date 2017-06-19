@@ -398,6 +398,9 @@ class Trainer(object):
         # Initialize local_t
         self.local_t = 0
         
+        # Synchronize with global network
+        sess.run(self.sync)
+        
         # Whether we hit a terminal state or not
         terminal_end = False
         start_lstm_state = self.local_network.lstm_state_out
