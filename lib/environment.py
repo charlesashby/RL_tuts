@@ -20,7 +20,7 @@ def preprocess_frame(observation):
     return resized_observation
 
 
-def worker(conn, env_name):
+def worker(conn, env_name, show_env=False):
     """
 
     :param conn:
@@ -35,6 +35,9 @@ def worker(conn, env_name):
 
     # Reset the environment
     env.reset()
+
+    if show_env:
+        env.render()
 
     # conn is the child end of a Pipe() object it
     # sends data received by the parent's. For more
@@ -55,6 +58,8 @@ def worker(conn, env_name):
             obs = env.reset()
             state = preprocess_frame(obs)
             conn.send(state)
+            if show_env:
+                env.render()
 
         elif command == COMMAND_ACTION:
             # In Gym, every actions are
@@ -63,12 +68,16 @@ def worker(conn, env_name):
             # ending state was terminal or not
             reward = 0
             for i in range(4):
+                if show_env:
+                    env.render()
                 obs, r, terminal, _ = env.step(arg)
                 reward += r
                 if terminal:
                     break
             state = preprocess_frame(obs)
             conn.send([state, reward, terminal])
+
+
 
         elif command == COMMAND_TERMINATE:
             # Terminate the environment
@@ -99,7 +108,7 @@ class Environment(object):
         env.close()
         return action_size
 
-    def __init__(self, env_name):
+    def __init__(self, env_name, show_env=False):
         # For more info on Pipes and multiprocessing in
         # general see https://docs.python.org/2/library/multiprocessing.html
         self.conn, child_conn = Pipe()
@@ -107,7 +116,7 @@ class Environment(object):
         # Our agents are controlled by the worker() method. They
         # receive commands from the parent connection that are
         # received by the child connection
-        self.proc = Process(target=worker, args=(child_conn, env_name))
+        self.proc = Process(target=worker, args=(child_conn, env_name, show_env))
         self.proc.start()
         self.conn.recv()
         self.reset()
@@ -138,4 +147,5 @@ class Environment(object):
         self.last_action = action
         self.last_reward = reward
         return state, reward, terminal
+
 
