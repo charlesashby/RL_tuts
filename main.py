@@ -8,8 +8,11 @@ from lib_model.a3c import A3C, Trainer
 from lib.optimizer import RMSPropApplier
 
 PATH = '/home/ashbylepoc/PycharmProjects/RL/'
+
+# Most models from Deepmind trained for ~20 hours
+# at 1000 steps/sec
 MAX_TIME_STEP = 10 * 10 ** 7
-LOG_FILE = PATH + 'checkpoints/log.txt'
+LOG_FILE = PATH + 'checkpoints/log'
 CHECKPOINT_DIR = PATH + 'checkpoints'
 
 
