@@ -71,7 +71,7 @@ class App(object):
 
             # Save the network
             if parallel_index == 0 and self.global_t > self.next_checkpoint:
-                self.saver.save(self.sess, SAVE_PATH)
+                self.saver.save(self.sess, CHECKPOINT_DIR)
 
                 # Set next checkpoint
                 self.next_checkpoint += self.checkpoint_interval
